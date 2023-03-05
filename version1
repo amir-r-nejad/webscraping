@@ -1,0 +1,250 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
+from bs4 import BeautifulSoup
+import pandas as pd
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import re
+import os
+import tkinter
+from tkinter import filedialog
+from tkinter import * 
+from tkinter.ttk import *
+
+
+# In[ ]:
+
+
+
+
+def openfile():
+    global filepath
+    global interface
+    filepath=filedialog.askopenfilename()
+    interface.destroy()
+
+
+interface=tkinter.Tk()
+interface.title("Please Open List of URLs")
+interface.geometry("500x220")
+
+
+button=tkinter.Button(interface, text="Open",height= 1, width=12,font=('Aerial 10'), command=openfile)
+button.place(x = 180, y = 130) 
+
+
+
+Label1= tkinter.Label(interface, text="This is a robot for crawling a list of URLs", font=('Aerial 10'))
+Label1.place(x = 50, y = 40) 
+Label2= tkinter.Label(interface, text="Select Excel file containing the list",font=('Aerial 10'))
+Label2.place(x = 50, y = 70) 
+
+interface.lift()
+
+interface.attributes('-topmost',True)
+interface.after_idle(interface.attributes,'-topmost',False)
+interface.mainloop()
+
+
+# In[ ]:
+
+
+#input file
+
+URLs=pd.read_excel(filepath)
+URLs=URLs.drop(columns=['Keyword No.','URL No.'])
+
+
+# In[ ]:
+
+
+#calculates the average lengh of charchters in tag
+def Average_tag_len(tag,soup_str):
+    tag_list=soup_str.find_all(tag)
+    tag_sum=0
+    tag_num= len(tag_list)
+    if tag_num>0:
+        for j in tag_list:
+            tag_sum += len(j.text)
+        return(tag_sum/tag_num)
+    else:
+        return 0
+    
+#Calculate the Keyword Quantity in tag    
+def Calculate_tag_Keyword(keyword,tag,soup_str):
+    tag_list=soup_str.find_all(tag)
+    matches = [match for match in tag_list if keyword in match.text]
+    return (len(matches))
+
+#Checks the exsistance of Keyword in Anchor texts and number of <a>
+def Check_anchor_Keyword_and_link_quantity(keyword,soup_str):
+    check=0
+    anchorlist= soup_str.find_all('a')
+    num=len(anchorlist)
+    for j in anchorlist:
+        if keyword in j.text:
+            check=1
+            break
+    return [check,num]
+
+
+
+#Checks the exsistance of Keyword in footer
+def Check_footer_Keyword(keyword,soup_str):
+    try:
+        if keyword in soup_str.find_all('footer')[0].text:
+            return 1
+        else:
+            return 0
+    except:
+        return 0
+    
+#Checks the exsistance of Keyword in URL
+def Check_url_Keyword(keyword,url_str):
+    if keyword in url_str:
+        return 1
+    else:
+        return 0
+
+#Calculates the number of Keyword in Alt texts
+def Calculate_alt_Keyword(keyword,soup_str):
+    alt_list= re.findall('alt=".+?"',str(soup_str))
+    matches = [match for match in alt_list if keyword in match]
+    return(len(matches))
+
+#Calculates the number of meta keywords
+def Calculate_meta_Keywords(soup_str):
+    meta_list= soup_str.find_all('meta',attrs={'name':['keyword','Keyword']})
+    return(len(meta_list))
+
+
+# In[ ]:
+
+
+df=pd.DataFrame(columns=['URL','Keyword','Ave_len_H1','Ave_len_H2','Ave_len_H3',
+                         'Num_Keyword_H1','Num_Keyword_H2','Num_Keyword_H3','Num_Keyword_P',
+                        'Keyword_in_Anchor','Keyword_in_Footer','Keyword_in_URL','Num_Keyword_alt',
+                        'Num_meta_Keyword','num_Links','content_download_time','Mobile_friendliness'])
+
+
+# In[ ]:
+
+
+inprogress=tkinter.Tk()
+inprogress.title("Running")
+inprogress.geometry("500x160")
+Label1= tkinter.Label(inprogress, text="Robot is Running... Please wait!", font=('Aerial 10'))
+Label1.place(x = 50, y = 70) 
+inprogress.update()
+progress = Progressbar(inprogress, orient = HORIZONTAL,length = 400, mode = 'determinate')
+progress.pack(pady = 10)
+inprogress.update()
+total_number_urls=len(URLs)
+count_done=0
+finish=False
+word_list_partial=[]
+prog=str(count_done)+' / '+str(total_number_urls)
+Pro= tkinter.Label(inprogress, text= prog, font=('Aerial 10'))
+Pro.place(x = 210, y = 40)
+inprogress.update_idletasks()
+
+try:
+    os.mkdir('Results')
+except:
+    pass
+os.chdir('Results')
+log_file = open("LogFile.txt", "w")
+log_file.write('This URLs have not been analysed:\n')
+
+
+
+
+for i in range(len(URLs)):
+    
+    key=URLs.iloc[i]['Keyword']
+    url=URLs.iloc[i]['URL']
+    try:
+        session = requests.Session()
+        retry = Retry(connect=2, backoff_factor=0.5)
+        adapter = HTTPAdapter(max_retries=retry)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        source= session.get(url)
+        soup=BeautifulSoup(source.text,'html.parser')
+        raw=[url,
+            key,
+            Average_tag_len('h1',soup),
+            Average_tag_len('h2',soup),
+            Average_tag_len('h3',soup),
+            Calculate_tag_Keyword(key,'h1',soup),
+            Calculate_tag_Keyword(key,'h2',soup),
+            Calculate_tag_Keyword(key,'h3',soup),
+            Calculate_tag_Keyword(key,'p',soup),
+            Check_anchor_Keyword_and_link_quantity(key,soup)[0],
+            Check_footer_Keyword(key,soup),
+            Check_url_Keyword(key,url),
+            Calculate_alt_Keyword(key,soup),
+            Calculate_meta_Keywords(soup),
+            Check_anchor_Keyword_and_link_quantity(key,soup)[1],
+            requests.get(url).elapsed.total_seconds(),
+            ''
+            ]
+        print(url+ ': Done')
+        df.loc[len(df)]=raw
+    except:
+        log_file.write(url+'\n')
+
+    count_done +=1
+    progress['value'] = round(count_done*100/total_number_urls)
+
+    prog=str(count_done)+' / '+str(total_number_urls)
+    Pro= tkinter.Label(inprogress, text= prog, font=('Aerial 10'))
+    Pro.place(x = 210, y = 40)
+
+    inprogress.update_idletasks()
+
+        
+
+inprogress.destroy()
+log_file.close()
+df.to_excel('Analyse_Result.xlsx')
+os.chdir('../')
+
+
+# In[ ]:
+
+
+
+
+
+def closewin():
+    global Done
+    Done.destroy()
+
+Done=tkinter.Tk()
+Done.title("Running")
+Done.geometry("500x190")
+Label1= tkinter.Label(Done, text="Successfully Done! ", font=('Aerial 10'))
+Label1.place(x = 50, y = 40) 
+done_text='you can find the results in:  Result/Analyse_Result.xlsx' 
+Label1= tkinter.Label(Done, text= done_text, font=('Aerial 10'))
+Label1.place(x = 50, y = 60)
+log_text='you can find the logs in:  Result/LogFile.txt'
+Label2= tkinter.Label(Done, text= log_text, font=('Aerial 10'))
+Label2.place(x = 50, y = 80)
+
+button=tkinter.Button(Done, text="OK",height= 1, width=12, font=('Aerial 11'), command=closewin)
+button.place(x = 200, y = 120)
+Done.mainloop()
+
+
+# In[ ]:
+
+
+
+
