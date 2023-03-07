@@ -19,7 +19,8 @@ This analysis helps us analyse the SEO friendliness of a large number of website
 * You can copy and paste this code in your JupyterLab.
 * You need to update the input file in an .xlsx format. This input file should include these columns:
 Keyword No.,	Keyword,	URL No., URL
-The sample input file is offered in the repository.
+Please find the sample input file here:
+https://docs.google.com/spreadsheets/d/1mBOZwwiPjmTtZjnFdVS0uOZKpEDxM8fcpcPZ_blr9wM/edit?usp=sharing 
 
 ### Executing program
 
